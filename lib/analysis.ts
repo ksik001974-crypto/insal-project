@@ -22,15 +22,7 @@ export async function analyzeComplaint(text: string) {
 - 욕설, 비속어, 조롱, 비하, 모욕 표현은 반드시 기준3
 - 특정 학생만의 점수, 성적, 특혜 요구는 기준2
 - 수업, 시험, 과제 자체를 부당하게 거부하는 내용은 기준1
-- 도배/무의미한 글은 정상 민원이 아니라 반드시 "도배/무의미"로 분류
-
-다음은 도배/무의미로 분류한다.
-
-- 무작위 자음/모음 나열
-- 의미 없는 문자 조합
-- 키보드 난타
-- 숫자와 문자만 반복된 내용
-- 사람이 읽을 수 없는 문장
+- 무작위 자음/모음 나열, 키보드 난타, 숫자와 문자만 섞인 의미 없는 글은 반드시 도배/무의미
 
 반드시 JSON만 출력한다.
 
@@ -49,7 +41,10 @@ ${text}
     const output = response.text ?? "";
 
     return JSON.parse(
-      output.replace(/```json/g, "").replace(/```/g, "").trim()
+      output
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim()
     );
   } catch {
     return fallbackAnalyze(text);
@@ -59,17 +54,34 @@ ${text}
 function fallbackAnalyze(text: string) {
   const normalized = text.replace(/\s/g, "");
 
-  const isSpam =
-    text.length < 5 ||
-    /(.)\1{5,}/.test(text) ||
-    /^[ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s]+$/.test(text);
+  const onlyJamoNumber =
+    /^[ㄱ-ㅎㅏ-ㅣ0-9a-zA-Z]+$/.test(normalized);
 
-  if (isSpam) {
+  const jamoCount =
+    (normalized.match(/[ㄱ-ㅎㅏ-ㅣ]/g) || []).length;
+
+  const numberCount =
+    (normalized.match(/[0-9]/g) || []).length;
+
+  const hangulSyllableCount =
+    (normalized.match(/[가-힣]/g) || []).length;
+
+  const isNonsense =
+    normalized.length >= 8 &&
+    jamoCount + numberCount >= normalized.length * 0.5 &&
+    hangulSyllableCount <= 3;
+
+  if (
+    normalized.length < 5 ||
+    /(.)\1{4,}/.test(normalized) ||
+    onlyJamoNumber ||
+    isNonsense
+  ) {
     return {
       violated: "도배/무의미",
-      reason: "민원 내용과 관련 없는 반복 문자 또는 의미 없는 메시지",
+      reason: "민원과 관련 없는 의미 없는 문자 나열 또는 도배성 메시지",
       problemPart: text,
-      riskScore: 40,
+      riskScore: 50,
     };
   }
 
