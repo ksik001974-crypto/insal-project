@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import StatusButtons from "./StatusButtons";
 
+export const dynamic = "force-dynamic";
 export default async function DetailPage({
   params,
 }: {
