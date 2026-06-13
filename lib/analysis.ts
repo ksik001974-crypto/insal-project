@@ -5,6 +5,12 @@ const ai = new GoogleGenAI({
 });
 
 export async function analyzeComplaint(text: string) {
+  const ruleResult = fallbackAnalyze(text);
+
+  if (ruleResult.violated !== "없음") {
+    return ruleResult;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -22,7 +28,7 @@ export async function analyzeComplaint(text: string) {
 - 욕설, 비속어, 조롱, 비하, 모욕 표현은 반드시 기준3
 - 특정 학생만의 점수, 성적, 특혜 요구는 기준2
 - 수업, 시험, 과제 자체를 부당하게 거부하는 내용은 기준1
-- 무작위 자음/모음 나열, 키보드 난타, 숫자와 문자만 섞인 의미 없는 글은 반드시 도배/무의미
+- 의미 없는 문자열, 키보드 난타, 무작위 문자 조합은 도배/무의미
 
 반드시 JSON만 출력한다.
 
@@ -47,15 +53,12 @@ ${text}
         .trim()
     );
   } catch {
-    return fallbackAnalyze(text);
+    return ruleResult;
   }
 }
 
 function fallbackAnalyze(text: string) {
   const normalized = text.replace(/\s/g, "");
-
-  const onlyJamoNumber =
-    /^[ㄱ-ㅎㅏ-ㅣ0-9a-zA-Z]+$/.test(normalized);
 
   const jamoCount =
     (normalized.match(/[ㄱ-ㅎㅏ-ㅣ]/g) || []).length;
@@ -63,19 +66,34 @@ function fallbackAnalyze(text: string) {
   const numberCount =
     (normalized.match(/[0-9]/g) || []).length;
 
-  const hangulSyllableCount =
+  const englishCount =
+    (normalized.match(/[a-zA-Z]/g) || []).length;
+
+  const hangulCount =
     (normalized.match(/[가-힣]/g) || []).length;
 
-  const isNonsense =
-    normalized.length >= 8 &&
-    jamoCount + numberCount >= normalized.length * 0.5 &&
-    hangulSyllableCount <= 3;
+  const totalLength = normalized.length;
+
+  const randomCharCount =
+    jamoCount + numberCount + englishCount;
+
+  const isRepeated =
+    /(.)\1{4,}/.test(normalized);
+
+  const isKeyboardSmash =
+    totalLength >= 8 &&
+    randomCharCount >= totalLength * 0.4 &&
+    hangulCount <= totalLength * 0.6;
+
+  const isMostlyJamo =
+    totalLength >= 6 &&
+    jamoCount >= totalLength * 0.4;
 
   if (
-    normalized.length < 5 ||
-    /(.)\1{4,}/.test(normalized) ||
-    onlyJamoNumber ||
-    isNonsense
+    totalLength < 5 ||
+    isRepeated ||
+    isKeyboardSmash ||
+    isMostlyJamo
   ) {
     return {
       violated: "도배/무의미",
